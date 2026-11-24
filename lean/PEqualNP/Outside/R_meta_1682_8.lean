@@ -78,7 +78,9 @@ theorem PEqualNP.Outside.R_meta_1682_8
   have edgeSym : ∀ a b, e a b ↔ e b a := by decide
   have posSym (a b) : pos a b = pos b a := by
     funext i
-    simp only [pos, or_comm]
+    apply Bool.eq_iff_iff.mpr
+    simp only [pos, decide_eq_true_eq]
+    exact or_comm
   have cases26 (motive : Fin 26 → Prop) (a : ∀ p, motive (pt p))
       (b : ∀ w, motive (ln w)) : ∀ k, motive k :=
     Fin.addCases (m := 13) (n := 13) (motive := motive) a b
@@ -95,7 +97,7 @@ theorem PEqualNP.Outside.R_meta_1682_8
         exact hpos p w ((edgeLP p w).1 h)
       · exact fun z h => (sepLL w z h.1).elim
   have Cneg : ∀ x, neg x → C.eval (List.ofFn x) = false := by
-    intro x ⟨hind, hmax, hgen⟩
+    rintro x ⟨hind, hmax, hgen⟩
     let P : Finset (Fin 13) := Finset.univ.filter fun p => x (pt p) = true
     have mP (p) : p ∈ P ↔ x (pt p) = true := by simp [P]
     have oppP (w) : ∀ i, sep (ln w) i → ∃ q, i = pt q := by
@@ -255,9 +257,12 @@ theorem PEqualNP.Outside.R_meta_1682_8
       simp only [List.length_ofFn, dite_eq_right h]
       by_cases hi : i ≤ 28
       · interval_cases i <;> rfl
-      · have hn : [feature k x, true, false].length ≤ i - 26 := by simp; omega
+      · have hi' : 29 ≤ i := Nat.lt_of_not_ge hi
+        have hn : [feature k x, true, false].length ≤ i - 26 := Nat.le_sub_of_add_le hi'
         rw [List.getD_eq_default _ _ hn]
-        simp [show i ≠ 26 by omega, show i ≠ 27 by omega]
+        have h26 := Nat.ne_of_gt (Nat.lt_of_lt_of_le (by decide : 26 < 29) hi')
+        have h27 := Nat.ne_of_gt (Nat.lt_of_lt_of_le (by decide : 27 < 29) hi')
+        simp [h26, h27]
   have getSnoc (l : List Bool) (v : Bool) (i : ℕ) :
       (l ++ [v]).getD i false = if i = l.length then v else l.getD i false := by
     by_cases h : i < l.length
@@ -265,7 +270,9 @@ theorem PEqualNP.Outside.R_meta_1682_8
     · rw [List.getD_append_right _ _ _ _ (Nat.le_of_not_gt h)]
       by_cases he : i = l.length
       · simp [he]
-      · rw [ite_eq_right he, List.getD_eq_default _ _ (by simp; omega),
+      · have hi : l.length < i := lt_of_le_of_ne (Nat.le_of_not_gt h) (Ne.symm he)
+        have hsub : [v].length ≤ i - l.length := Nat.le_sub_of_add_le' hi
+        rw [ite_eq_right he, List.getD_eq_default _ _ hsub,
           List.getD_eq_default _ _ (Nat.le_of_not_gt h)]
   have shortList (l : List ℕ) (hlen : l.length ≤ 2) :
       l = [] ∨ (∃ i, l = [i]) ∨ ∃ i j, l = [i, j] := by
@@ -274,6 +281,8 @@ theorem PEqualNP.Outside.R_meta_1682_8
     · exact Or.inr (Or.inl ⟨i, rfl⟩)
     · exact Or.inr (Or.inr ⟨i, j, rfl⟩)
     · simp at hlen
+  have evalAnd (l : List Bool) : GateOp.and.eval l = l.all id := rfl
+  have evalOr (l : List Bool) : GateOp.or.eval l = l.any id := rfl
   let step := fun (l : List Bool) (g : Gate) =>
     l ++ [g.op.eval (g.inputs.map fun i => l.getD i false)]
   let ok := fun (g : Gate) =>
@@ -297,16 +306,26 @@ theorem PEqualNP.Outside.R_meta_1682_8
     | cons g gs ih =>
       simp only [List.map_cons, List.foldl_cons]
       apply ih (fun g hg' => hg g (List.mem_cons_of_mem _ hg'))
-        _ _ (by simp [step]; omega) (by simp [step]; omega)
+        _ _ (by simpa [step] using Nat.le_trans ha (Nat.le_succ a.length))
+        (by simpa [step] using hb)
       intro j
       have hj : (if h : j < 26 then (s ⟨j, h⟩).val else if j = 26 then r else j + 2)
           = b.length ↔ j = a.length := by
+        have hlen : 29 ≤ b.length := by
+          rw [hb]
+          exact Nat.add_le_add_right ha 2
+        have ha26 : 26 < a.length := ha
         by_cases h : j < 26
-        · have hh := (s ⟨j, h⟩).isLt
-          rw [dite_eq_left h]
-          omega
+        · rw [dite_eq_left h]
+          have hwire := Nat.lt_trans (s ⟨j, h⟩).isLt
+            (Nat.lt_of_lt_of_le (by decide : 26 < 29) hlen)
+          exact iff_of_false (Nat.ne_of_lt hwire) (Nat.ne_of_lt (Nat.lt_trans h ha26))
         · rw [dite_eq_right h]
-          split <;> omega
+          by_cases hj26 : j = 26
+          · rw [ite_eq_left hj26, hj26]
+            exact iff_of_false (Nat.ne_of_lt (Nat.lt_of_lt_of_le hr hlen)) (Nat.ne_of_lt ha26)
+          · rw [ite_eq_right hj26, hb]
+            exact Nat.add_right_cancel_iff
       simp only [step, getSnoc, hj]
       split
       · obtain ⟨hgo, hgi⟩ := hg g (List.mem_cons_self ..)
@@ -319,12 +338,13 @@ theorem PEqualNP.Outside.R_meta_1682_8
           · exact hdiag true
           · exact hdiag false
         · subst l
-          rcases hgo with rfl | rfl <;>
-            simpa [GateOp.eval] using hab u
+          rcases hgo with rfl | rfl
+          · simpa [evalAnd] using hab u
+          · simpa [evalOr] using hab u
         · subst l
           rcases hgo with rfl | rfl
-          · simpa [GateOp.eval] using (hgate _ _ _ _ (hab u) (hab v)).1
-          · simpa [GateOp.eval] using (hgate _ _ _ _ (hab u) (hab v)).2
+          · simpa [evalAnd] using (hgate _ _ _ _ (hab u) (hab v)).1
+          · simpa [evalOr] using (hgate _ _ _ _ (hab u) (hab v)).2
       · exact hab j
   have negRen (s : Fin 26 → Fin 26) (h : good s) (x : Fin 26 → Bool)
       (hx : neg x) : neg (x ∘ s) := by
@@ -369,9 +389,11 @@ theorem PEqualNP.Outside.R_meta_1682_8
       obtain ⟨g', hg', rfl⟩ := List.mem_map.mp hq
       exact ⟨(HG _ hg').1, by simpa using (HG _ hg').2⟩
     have hDsize : D.size ≤ 62 := by
-      simp only [Circuit.size, hgs, List.length_cons] at hs
-      simp only [D, Circuit.size, List.length_map]
-      omega
+      change C.gates.length ≤ 63 at hs
+      rw [hgs, List.length_cons] at hs
+      change (gs.map (fun g => Gate.mk g.op (g.inputs.map idx))).length ≤ 62
+      rw [List.length_map]
+      exact Nat.le_of_succ_le_succ hs
     let R := fun (dir a b : Bool) =>
       if dir then a = true → b = true else b = true → a = true
     have relGate (d : Bool) (a₁ a₂ b₁ b₂ : Bool) (h₁ : R d a₁ b₁) (h₂ : R d a₂ b₂) :
@@ -398,15 +420,19 @@ theorem PEqualNP.Outside.R_meta_1682_8
         · by_cases heq : i = 26
           · subst i
             simpa [idx, b] using hfirst
-          · have h26 : ¬ i + 2 < 26 := by omega
-            have h26' : i + 2 ≠ 26 := by omega
-            have h27 : i + 2 ≠ 27 := by omega
+          · have h27 : 27 < i + 2 :=
+              Nat.lt_of_lt_of_le (by decide : 27 < 28) (Nat.add_le_add_right (Nat.le_of_not_gt hi) 2)
+            have h26 := Nat.lt_trans (by decide : 26 < 27) h27
             simp only [ite_eq_right heq, getInput, getLift, idx, b, dite_eq_right hi,
-              dite_eq_right h26, ite_eq_right h26', h27, decide_false]
+              dite_eq_right (Nat.not_lt_of_ge (Nat.le_of_lt h26)),
+              ite_eq_right (Nat.ne_of_gt h26), Nat.ne_of_gt h27, decide_false]
             exact relDiag _ _
-      have hrel := transTail s r hr gs HG a b (by omega) (by omega) (R d) (relGate d)
-        (relDiag d) hbase C.output
-      simpa only [Circuit.eval, Circuit.wires, hgs, List.foldl_cons, D, a, b, idx] using hrel
+      have hrel := transTail s r hr gs HG a b (by simpa only [ha] using Nat.le_refl 27) (by rw [ha, hb])
+        (R d) (relGate d) (relDiag d) hbase C.output
+      change R d ((C.gates.foldl step (List.ofFn (x ∘ s))).getD C.output false)
+        (((gs.map (fun g => Gate.mk g.op (g.inputs.map idx))).foldl step b).getD (idx C.output) false)
+      rw [hgs, List.foldl_cons]
+      exact hrel
     apply noTail k D hD hDsize
     · intro u v hu
       have h := both (pos u v) true (hp u v hu)
@@ -420,7 +446,10 @@ theorem PEqualNP.Outside.R_meta_1682_8
   | nil =>
     have ha := Cpos 0 13 (by decide)
     have hb := Cpos 1 14 (by decide)
-    simp only [Circuit.eval, Circuit.wires, hgs, List.foldl_nil, getInput] at ha hb
+    have readOnly (x : Fin 26 → Bool) : C.eval (List.ofFn x) = (List.ofFn x).getD C.output false := by
+      change (C.gates.foldl step (List.ofFn x)).getD C.output false = _
+      rw [hgs, List.foldl_nil]
+    rw [readOnly, getInput] at ha hb
     by_cases hi : C.output < 26
     · rw [dite_eq_left hi] at ha hb
       have hfalse : ∀ i : Fin 26, pos 0 13 i = true → pos 1 14 i = false := by decide
@@ -443,8 +472,9 @@ theorem PEqualNP.Outside.R_meta_1682_8
     obtain ⟨o, ho⟩ := opForm
     let src := fun i : ℕ => if i < 26 then i else 28
     have hr (i) : src i < 29 := by
-      simp only [src]
-      split <;> omega
+      by_cases hi : i < 26
+      · simpa only [src, ite_eq_left hi] using Nat.lt_trans hi (by decide : 26 < 29)
+      · simpa only [src, ite_eq_right hi] using (by decide : 28 < 29)
     have readAlias (x : Fin 26 → Bool) (i : ℕ) :
         (liftInput 0 x).getD (src i) false = (List.ofFn x).getD i false := by
       rw [getInput]
@@ -459,7 +489,9 @@ theorem PEqualNP.Outside.R_meta_1682_8
     have first2 (i j : ℕ) (h : g.inputs = [i, j]) (x : Fin 26 → Bool) :
         first g x = mix ((List.ofFn x).getD i false) ((List.ofFn x).getD j false) := by
       simp only [first, h, List.map_cons, List.map_nil, ho]
-      cases o <;> simp [mix, GateOp.eval]
+      cases o
+      · simp [mix, evalAnd]
+      · simp [mix, evalOr]
     have anyPair (i j) (hi : i < 26) (hj : j < 26) (hin : g.inputs = [i, j]) :
         ∀ (s : Fin 26 → Fin 26) (x : Fin 26 → Bool),
           first g (x ∘ s) = mix (x (s ⟨i, hi⟩)) (x (s ⟨j, hj⟩)) := by
@@ -467,7 +499,7 @@ theorem PEqualNP.Outside.R_meta_1682_8
       simp only [first2 _ _ hin, getInput, dite_eq_left hi, dite_eq_left hj, Function.comp_apply]
     have andUnlessEdge (a b : Fin 26) (hn : a ≠ b) (hnb : ¬ e a b) :
         ∀ u v, e u v → ¬ (pos u v a = true ∧ pos u v b = true) := by
-      intro u v h ⟨ha, hb⟩
+      rintro u v h ⟨ha, hb⟩
       simp only [pos, decide_eq_true_eq] at ha hb
       rcases ha with rfl | rfl <;> rcases hb with rfl | rfl
       · exact hn rfl
@@ -480,18 +512,20 @@ theorem PEqualNP.Outside.R_meta_1682_8
       · apply useEq id goodId 0 27 (by decide)
         intro x
         rw [getLift]
-        simp [first, hin, ho, GateOp.eval]
+        simp [first, hin, ho, evalAnd]
       · apply useEq id goodId 0 28 (by decide)
         intro x
         rw [getLift]
-        simp [first, hin, ho, GateOp.eval]
+        simp [first, hin, ho, evalOr]
     | cons i rest =>
       cases rest with
       | nil =>
         apply useEq id goodId 0 (src i) (hr i)
         intro x
         rw [readAlias]
-        cases o <;> simp [first, hin, ho, GateOp.eval]
+        cases o
+        · simp [first, hin, ho, evalAnd]
+        · simp [first, hin, ho, evalOr]
       | cons j rest =>
         cases rest with
         | cons v vs => simp [hin] at hcap
