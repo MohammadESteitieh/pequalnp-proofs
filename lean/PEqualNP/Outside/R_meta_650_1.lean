@@ -33,6 +33,8 @@ theorem PEqualNP.Outside.R_meta_650_1
   have incident : ∀ p l : Fin 13,
       ((Fin.castAdd 13 p).val, (Fin.natAdd 13 l).val) ∈ E ↔ p + l ∈ D := by decide
   have bounds : ∀ u v : Fin 26, (u.val, v.val) ∈ E → u.val < 13 ∧ 13 ≤ v.val := by decide
+  have evalAnd (l : List Bool) : GateOp.and.eval l = l.all id := rfl
+  have evalOr (l : List Bool) : GateOp.or.eval l = l.any id := rfl
   have fold_mono (gs : List Gate)
       (hm : ∀ g ∈ gs, g.op = GateOp.and ∨ g.op = GateOp.or)
       (a b : List Bool) (hab : ∀ i, a.getD i false = true → b.getD i false = true)
@@ -46,10 +48,13 @@ theorem PEqualNP.Outside.R_meta_650_1
       have hg : g.op.eval (g.inputs.map fun j => a.getD j false) = true →
           g.op.eval (g.inputs.map fun j => b.getD j false) = true := by
         rcases hm g (by simp) with h | h
-        · simp only [h, GateOp.eval, List.all_map, Function.comp_apply, List.all_eq_true]
+        · simp only [h, evalAnd, List.all_map]
+          rw [List.all_eq_true, List.all_eq_true]
           exact fun he j hj => hab j (he j hj)
-        · simp only [h, GateOp.eval, List.any_map, Function.comp_apply, List.any_eq_true]
-          exact fun ⟨j, hj, he⟩ => ⟨j, hj, hab j he⟩
+        · simp only [h, evalOr, List.any_map]
+          rw [List.any_eq_true, List.any_eq_true]
+          rintro ⟨j, hj, he⟩
+          exact ⟨j, hj, hab j he⟩
       apply ih (fun g' hg' => hm g' (List.mem_cons_of_mem _ hg')) _ _ _ (by simp [hlen])
       intro i hi
       simp only [List.getD_eq_getElem?_getD, List.getElem?_append, ← hlen] at hi ⊢
@@ -61,7 +66,8 @@ theorem PEqualNP.Outside.R_meta_650_1
         · subst i
           simpa using hg (by simpa using hi)
         · cases hs : i - a.length with
-          | zero => omega
+          | zero =>
+            exact (he (Nat.le_antisymm (Nat.sub_eq_zero_iff_le.mp hs) (Nat.le_of_not_gt hlt))).elim
           | succ k => simp [hs] at hi
 
   have eval_mono {n : ℕ} {x y : Fin n → Bool}
@@ -114,9 +120,9 @@ theorem PEqualNP.Outside.R_meta_650_1
   · rintro ⟨u, v, huv, hu, hv⟩
     obtain ⟨hu', hv'⟩ := bounds u v huv
     let p : Fin 13 := ⟨u.val, hu'⟩
-    let l : Fin 13 := ⟨v.val - 13, by omega⟩
+    let l : Fin 13 := ⟨v.val - 13, (Nat.sub_lt_iff_lt_add hv').2 v.isLt⟩
     have he₁ : Fin.castAdd 13 p = u := Fin.ext rfl
-    have he₂ : Fin.natAdd 13 l = v := Fin.ext (by change 13 + (v.val - 13) = v.val; omega)
+    have he₂ : Fin.natAdd 13 l = v := Fin.ext (Nat.add_sub_of_le hv')
     have hi : p + l ∈ D := (incident p l).1 (by simpa only [he₁, he₂] using huv)
     apply eval_mono _ (hpos p l hi)
     intro i h
